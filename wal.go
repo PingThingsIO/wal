@@ -81,6 +81,11 @@ type Options struct {
 	FilePerms os.FileMode
 	// RecoverCorruptedTail will attempt to recover a corrupted tail in the last segment automatically.
 	RecoverCorruptedTail bool
+	// Logging function.
+	Logf func(fmt string, v ...any)
+}
+
+func noLog(fmt string, v ...any) {
 }
 
 // DefaultOptions for Open().
@@ -93,6 +98,7 @@ var DefaultOptions = &Options{
 	DirPerms:             0750,     // Permissions for the created directories
 	FilePerms:            0640,     // Permissions for the created data files
 	RecoverCorruptedTail: false,    // Don't recover corrupted tail.
+	Logf:                 noLog,
 }
 
 // Log represents a write ahead log
@@ -108,6 +114,8 @@ type Log struct {
 	sfile      *os.File    // tail segment file handle
 	wbatch     Batch       // reusable write batch
 	scache     tinylru.LRU // segment entries cache
+
+	logf func(fmt string, v ...any)
 }
 
 // segment represents a single segment file.
@@ -147,6 +155,9 @@ func Open(path string, opts *Options) (*Log, error) {
 		return nil, err
 	}
 	l := &Log{path: path, opts: *opts}
+	if l.logf = opts.Logf; l.logf == nil {
+		l.logf = DefaultOptions.Logf
+	}
 	l.scache.Resize(l.opts.SegmentCacheSize)
 	if err := os.MkdirAll(path, l.opts.DirPerms); err != nil {
 		return nil, err
@@ -548,6 +559,7 @@ func (l *Log) loadSegmentEntries(s *segment, ignoreCorruptedTail bool) error {
 			n, err = loadNextBinaryEntry(data)
 		}
 		if err == ErrCorrupt && ignoreCorruptedTail {
+			l.logf("corrupted tail, ignoring")
 			break
 		}
 		if err != nil {
