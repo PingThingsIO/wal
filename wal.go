@@ -558,7 +558,7 @@ func (l *Log) loadSegmentEntries(s *segment, ignoreCorruptedTail bool) error {
 		} else {
 			n, err = loadNextBinaryEntry(data)
 		}
-		if err == ErrCorrupt && ignoreCorruptedTail {
+		if errors.Is(err, ErrCorrupt) && ignoreCorruptedTail {
 			l.logf("corrupted tail, ignoring")
 			break
 		}
@@ -592,10 +592,11 @@ func loadNextBinaryEntry(data []byte) (n int, err error) {
 	// data_size + data
 	size, n := binary.Uvarint(data)
 	if n <= 0 {
-		return 0, ErrCorrupt
+		return 0, fmt.Errorf("%w: invalid entry data size: %d", ErrCorrupt, n)
 	}
-	if uint64(len(data)-n) < size {
-		return 0, ErrCorrupt
+	exp := uint64(len(data) - n)
+	if exp < size {
+		return 0, fmt.Errorf("%w: truncated entry data: %d < %d", ErrCorrupt, exp, size)
 	}
 	return n + int(size), nil
 }
