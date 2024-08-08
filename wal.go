@@ -641,7 +641,7 @@ func (l *Log) loadSegment(index uint64) (*segment, error) {
 		if index >= s.index && index < s.index+uint64(len(s.epos)) {
 			rseg = s
 		}
-		return false
+		return true
 	})
 	if rseg != nil {
 		return rseg, nil
