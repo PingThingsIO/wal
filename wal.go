@@ -130,6 +130,7 @@ type Log struct {
 	firstIndex uint64      // index of the first entry in log
 	lastIndex  uint64      // index of the last entry in log
 	sfile      *os.File    // tail segment file handle
+	dir        *os.File    // dir for syncing
 	wbatch     Batch       // reusable write batch
 	scache     tinylru.LRU // segment entries cache
 
@@ -178,6 +179,8 @@ func Open(path string, opts *Options) (*Log, error) {
 	}
 	l.scache.Resize(l.opts.SegmentCacheSize)
 	if err := os.MkdirAll(path, l.opts.DirPerms); err != nil {
+		return nil, err
+	} else if l.dir, err = os.OpenFile(path, os.O_RDONLY, 0); err != nil {
 		return nil, err
 	}
 	if err := l.load(); err != nil {
@@ -335,6 +338,9 @@ func (l *Log) Close() error {
 	if err := l.sfile.Close(); err != nil {
 		return err
 	}
+	if err := l.dir.Close(); err != nil {
+		return err
+	}
 	l.closed = true
 	if l.corrupt {
 		return ErrCorrupt
@@ -370,6 +376,9 @@ func (l *Log) cycle() error {
 		return err
 	}
 	if err := l.sfile.Close(); err != nil {
+		return err
+	}
+	if err := l.dir.Sync(); err != nil {
 		return err
 	}
 	// cache the previous segment
@@ -511,6 +520,9 @@ func (l *Log) writeBatch(b *Batch) error {
 	}
 	if !l.opts.NoSync {
 		if err := l.sfile.Sync(); err != nil {
+			return err
+		}
+		if err := l.dir.Sync(); err != nil {
 			return err
 		}
 	}
@@ -992,7 +1004,10 @@ func (l *Log) Sync() error {
 	} else if l.closed {
 		return ErrClosed
 	}
-	return l.sfile.Sync()
+	if err := l.sfile.Sync(); err != nil {
+		return err
+	}
+	return l.dir.Sync()
 }
 
 // IsEmpty returns true if there are no entries in the log.
