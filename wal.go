@@ -1038,6 +1038,7 @@ func (l *Log) Clear() error {
 
 	// Clear most state
 	l.segments = []*segment{}
+	l.sfile.Close()
 	l.sfile = nil
 	l.firstIndex = 1
 	l.lastIndex = 0
